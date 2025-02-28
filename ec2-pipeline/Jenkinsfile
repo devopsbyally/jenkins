@@ -8,8 +8,8 @@ pipeline {
     stages {
         stage('perform ec2 action') {
             steps {
-                echo 'Your ${params.INSTANCE_ID} is now going to ${params.ACTION}'
-                sh 'aws ec2 ${params.ACTION}-instances --instance-ids ${params.INSTANCE_ID}'
+                echo "Your ${params.INSTANCE_ID} is now going to ${params.ACTION}"
+                sh "aws ec2 ${params.ACTION}-instances --instance-ids ${params.INSTANCE_ID}"
             }
         }
     }
