@@ -9,22 +9,44 @@ pipeline {
     }
 
     stages {
-        stage('perform ec2 action') {
+        stage('Perform EC2 Action') {
             steps {
-                echo "Your ${params.INSTANCE_ID} is now going to ${params.ACTION}"
+                echo "Your instance ${params.INSTANCE_ID} is now going to ${params.ACTION}"
                 sh "aws ec2 ${params.ACTION}-instances --instance-ids ${params.INSTANCE_ID}"
             }
         }
     }
-        post { 
+
+    post { 
         always { 
-            sh "aws sns publish --topic-arn ${SNS_TOPIC_ARN} --message "ℹ️ Jenkins Pipeline Completed!\n🎯 EC2 Action: $ACTION\n🔹 Instance ID: $INSTANCE_ID\n📅 Timestamp: $(date)""
+            sh '''
+            aws sns publish --topic-arn '"'"'${SNS_TOPIC_ARN}'"'"' --message '"'"'
+            ℹ️ Jenkins Pipeline Completed!
+            🎯 EC2 Action: ${params.ACTION}
+            🔹 Instance ID: ${params.INSTANCE_ID}
+            📅 Timestamp: $(date)
+            '"'"'
+            '''
         }
         success { 
-            sh "aws sns publish --topic-arn ${SNS_TOPIC_ARN} --message "ℹ️ Jenkins Pipeline Successful!\n🎯 EC2 Action: $ACTION\n🔹 Instance ID: $INSTANCE_ID\n📅 Timestamp: $(date)""
+            sh '''
+            aws sns publish --topic-arn '"'"'${SNS_TOPIC_ARN}'"'"' --message '"'"'
+            ✅ Jenkins Pipeline Successful!
+            🎯 EC2 Action: ${params.ACTION}
+            🔹 Instance ID: ${params.INSTANCE_ID}
+            📅 Timestamp: $(date)
+            '"'"'
+            '''
         }
         failure { 
-            sh "aws sns publish --topic-arn ${SNS_TOPIC_ARN} --message "ℹ️ Jenkins Pipeline Failed!\n🎯 EC2 Action: $ACTION\n🔹 Instance ID: $INSTANCE_ID\n📅 Timestamp: $(date)""
+            sh '''
+            aws sns publish --topic-arn '"'"'${SNS_TOPIC_ARN}'"'"' --message '"'"'
+            ❌ Jenkins Pipeline Failed!
+            🎯 EC2 Action: ${params.ACTION}
+            🔹 Instance ID: ${params.INSTANCE_ID}
+            📅 Timestamp: $(date)
+            '"'"'
+            '''
         }
     }
 }
