@@ -1,0 +1,16 @@
+pipeline {
+    agent any
+    parameters {
+  choice choices: ['start', 'reboot', 'stop', 'terminate'], description: 'perform action for ec2', name: 'ACTION'
+  string description: 'instance id', name: 'INSTANCE_ID'
+}
+
+    stages {
+        stage('perform ec2 action') {
+            steps {
+                echo 'Your ${params.INSTANCE_ID} is now going to ${params.ACTION}'
+                sh 'aws ec2 ${params.ACTION}-instances --instance-ids ${params.INSTANCE_ID}'
+            }
+        }
+    }
+}
