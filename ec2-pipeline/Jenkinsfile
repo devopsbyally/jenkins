@@ -19,34 +19,25 @@ pipeline {
 
     post { 
         always { 
-            sh '''
-            aws sns publish --topic-arn '"'"'${SNS_TOPIC_ARN}'"'"' --message '"'"'
-            ℹ️ Jenkins Pipeline Completed!
-            🎯 EC2 Action: ${params.ACTION}
-            🔹 Instance ID: ${params.INSTANCE_ID}
-            📅 Timestamp: $(date)
-            '"'"'
-            '''
+            sh """
+            aws sns publish --topic-arn ${SNS_TOPIC_ARN} --message "$(
+            echo -e 'ℹ️ Jenkins Pipeline Completed!\\n🎯 EC2 Action: ${params.ACTION}\\n🔹 Instance ID: ${params.INSTANCE_ID}\\n📅 Timestamp: $(date)'
+            )"
+            """
         }
         success { 
-            sh '''
-            aws sns publish --topic-arn '"'"'${SNS_TOPIC_ARN}'"'"' --message '"'"'
-            ✅ Jenkins Pipeline Successful!
-            🎯 EC2 Action: ${params.ACTION}
-            🔹 Instance ID: ${params.INSTANCE_ID}
-            📅 Timestamp: $(date)
-            '"'"'
-            '''
+            sh """
+            aws sns publish --topic-arn ${SNS_TOPIC_ARN} --message "$(
+            echo -e '✅ Jenkins Pipeline Successful!\\n🎯 EC2 Action: ${params.ACTION}\\n🔹 Instance ID: ${params.INSTANCE_ID}\\n📅 Timestamp: $(date)'
+            )"
+            """
         }
         failure { 
-            sh '''
-            aws sns publish --topic-arn '"'"'${SNS_TOPIC_ARN}'"'"' --message '"'"'
-            ❌ Jenkins Pipeline Failed!
-            🎯 EC2 Action: ${params.ACTION}
-            🔹 Instance ID: ${params.INSTANCE_ID}
-            📅 Timestamp: $(date)
-            '"'"'
-            '''
+            sh """
+            aws sns publish --topic-arn ${SNS_TOPIC_ARN} --message "$(
+            echo -e '❌ Jenkins Pipeline Failed!\\n🎯 EC2 Action: ${params.ACTION}\\n🔹 Instance ID: ${params.INSTANCE_ID}\\n📅 Timestamp: $(date)'
+            )"
+            """
         }
     }
 }
