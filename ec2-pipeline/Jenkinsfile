@@ -20,7 +20,7 @@ pipeline {
     post { 
         always { 
             sh """
-            aws sns publish --topic-arn ${env.SNS_TOPIC_ARN} --message "jenkins pipeline completed"
+            aws sns publish --topic-arn ${env.SNS_TOPIC_ARN}  --subject "Jenkins Pipeline Update - Instance ${params.INSTANCE_ID}" --message "jenkins pipeline completed"
             """
         }
         success { 
