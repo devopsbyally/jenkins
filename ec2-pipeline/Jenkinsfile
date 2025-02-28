@@ -4,6 +4,9 @@ pipeline {
   choice choices: ['start', 'reboot', 'stop', 'terminate'], description: 'perform action for ec2', name: 'ACTION'
   string description: 'instance id', name: 'INSTANCE_ID'
 }
+    environment { 
+        SNS_TOPIC_ARN = 'arn:aws:sns:us-east-2:010526277866:pipeline-sns'
+    }
 
     stages {
         stage('perform ec2 action') {
@@ -15,13 +18,13 @@ pipeline {
     }
         post { 
         always { 
-            echo 'I will always say Hello again!'
+            sh "aws sns publish --topic-arn ${SNS_TOPIC_ARN} --message "ℹ️ Jenkins Pipeline Completed!\n🎯 EC2 Action: $ACTION\n🔹 Instance ID: $INSTANCE_ID\n📅 Timestamp: $(date)""
         }
         success { 
-            echo 'Pipeline is has succeeded!'
+            sh "aws sns publish --topic-arn ${SNS_TOPIC_ARN} --message "ℹ️ Jenkins Pipeline Successful!\n🎯 EC2 Action: $ACTION\n🔹 Instance ID: $INSTANCE_ID\n📅 Timestamp: $(date)""
         }
         failure { 
-            echo 'Pipeline has failed!'
+            sh "aws sns publish --topic-arn ${SNS_TOPIC_ARN} --message "ℹ️ Jenkins Pipeline Failed!\n🎯 EC2 Action: $ACTION\n🔹 Instance ID: $INSTANCE_ID\n📅 Timestamp: $(date)""
         }
     }
 }
