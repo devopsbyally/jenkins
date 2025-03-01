@@ -20,15 +20,12 @@ pipeline {
                 '''
             }
         }
-         stage('Workspace Clean-up') {
-            steps {
-                script {
-                echo "Cleaning up workspace"
-                cleanWs()
-                sh "ls -l ${WORKSPACE}"
-            }
-            }
+    }
+
+    post { 
+        cleanup { 
+            echo 'we are cleaning up workspace'
+            cleanWs()
         }
     }
 }
-
