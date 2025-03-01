@@ -14,8 +14,8 @@ pipeline {
             steps {
                 
                 sh '''
-                echo "This is build $(date)" > build_date.txt
-                echo "This is temporary data" > tmp.txt
+                echo "This is build $(date)" > build_date-$(date +%d%m%y%H%S).txt
+                echo "This is temporary data" > tmp-$(date + %d%m%y%H%S).txt
                 ls -l 
                 '''
             }
