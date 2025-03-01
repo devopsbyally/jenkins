@@ -1,0 +1,22 @@
+pipeline {
+    agent any
+  
+    stages {
+        stage('Check existing files') {
+            steps {
+                echo "Checking if old files exists"
+                sh "ls -l ${WORKSPACE}"
+            }
+        }
+        stage('Generate files') {
+            steps {
+                sh """ 
+                echo "This is build $(date)" > build_date.txt
+                echo "This is temporary data" > tmp.txt
+                ls -l ${WORKSPACE}
+                """
+            }
+        }
+    }
+}
+
