@@ -4,17 +4,20 @@ pipeline {
     stages {
         stage('Check existing files') {
             steps {
+                script {
                 echo "Checking if old files exists"
                 sh "ls -l ${WORKSPACE}"
+            }
             }
         }
         stage('Generate files') {
             steps {
-                sh """ 
+                
+                sh '''
                 echo "This is build $(date)" > build_date.txt
                 echo "This is temporary data" > tmp.txt
-                ls -l ${WORKSPACE}
-                """
+                ls -l 
+                '''
             }
         }
     }
