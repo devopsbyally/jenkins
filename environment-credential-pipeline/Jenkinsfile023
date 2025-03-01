@@ -1,0 +1,15 @@
+pipeline {
+    agent any
+    environment {
+        jenkins_key = credentials('rds-user-password')
+        ABC = 'tom'
+    }
+    stages {
+        stage('Print Credentials') {
+            steps {
+            echo "RDS Password: ${env.jenkins_key}"
+            echo "User: ${env.ABC}"
+            }
+        }
+    }
+}
