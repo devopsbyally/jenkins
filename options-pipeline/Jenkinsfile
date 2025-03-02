@@ -1,0 +1,24 @@
+pipeline {
+    agent any
+    options{
+        // In 1 minutes it will have a timeout. 
+        timeout(time: 1, unit: 'MINUTES')
+        // On failure, retry this stage 
+        retry(3)
+        // It will add timestamp logs
+        timestamps()
+    }
+    environment {
+        jenkins_key = credentials('rds-user-password')
+        ABC = 'tom'
+    }
+    stages {
+        stage('Print Credentials') {
+            steps {
+            echo "RDS Password: ${env.jenkins_key}"
+            echo "User: ${env.ABC}"
+            sleep 300
+            }
+        }
+    }
+}
