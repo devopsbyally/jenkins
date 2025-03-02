@@ -1,0 +1,34 @@
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'STACK_NAME', defaultValue: 'my-cloudformation-stack', description: 'CloudFormation Stack Name')
+        string(name: 'BUCKET_NAME', defaultValue: 'my-unique-bucket-name', description: 'S3 Bucket Name')
+        string(name: 'KMS_KEY_ID', defaultValue: 'your-kms-key-id', description: 'KMS Key ID for Encryption')
+        choice(name: 'VERSIONING_STATUS', choices: ['Enabled', 'Suspended'], description: 'Versioning Status')
+    }
+
+    stages {
+
+        stage('Deploy CloudFormation') {
+            steps {
+                sh """
+                aws cloudformation deploy \\
+                    --stack-name $STACK_NAME \\
+                    --template-file $WORKSPACE/s3-cloudformation-template-jenkins/s3-bucket-creation.yml \\
+                    --capabilities CAPABILITY_NAMED_IAM \\
+                    --parameter-overrides \\
+                        BucketName=${BUCKET_NAME} \\
+                        KmsKeyId=${KMS_KEY_ID} \\
+                        VersioningStatus=${VERSIONING_STATUS}
+                """
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                sh "aws cloudformation describe-stacks --stack-name $STACK_NAME"
+            }
+        }
+    }
+}
