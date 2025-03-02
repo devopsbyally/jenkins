@@ -2,7 +2,7 @@ pipeline {
     agent any
     options{
         // In 1 minutes it will have a timeout. 
-        timeout(time: 1, unit: 'MINUTES')
+        //timeout(time: 1, unit: 'MINUTES')
         // On failure, retry this stage 
         retry(3)
         // It will add timestamp logs
@@ -17,7 +17,10 @@ pipeline {
             steps {
             echo "RDS Password: ${env.jenkins_key}"
             echo "User: ${env.ABC}"
-            sleep 300
+            //pwd1 should fail
+            sh'''
+            pwd1 
+            '''
             }
         }
     }
