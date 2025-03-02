@@ -3,10 +3,14 @@ pipeline {
     options{
         // In 1 minutes it will have a timeout. 
         //timeout(time: 1, unit: 'MINUTES')
+
         // On failure, retry this stage 
         retry(3)
+
         // It will add timestamp logs
         timestamps()
+
+        buildDiscarder(logRotator(numToKeepStr: '4'))
     }
     environment {
         jenkins_key = credentials('rds-user-password')
@@ -17,6 +21,7 @@ pipeline {
             steps {
             echo "RDS Password: ${env.jenkins_key}"
             echo "User: ${env.ABC}"
+
             //pwd1 should fail
             sh'''
             pwd1 
