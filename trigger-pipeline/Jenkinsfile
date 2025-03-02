@@ -1,8 +1,9 @@
 pipeline {
     agent any
     triggers {
-    // every 1 min there will be a cron job
-        cron('*/1 * * * *') 
+    // every every sunday at 5pm there will be a cron job
+     //   cron('0 17 * * 7') 
+        pollSCM('* * * * *')
     }
     environment {
         jenkins_key = credentials('rds-user-password')
