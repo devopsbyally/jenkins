@@ -1,0 +1,47 @@
+pipeline {
+    agent any
+    parameters {
+        choice(name: 'BRANCH_NAME', choices: ['develop', 'main'], description: 'Select the branch to deploy')
+    }
+    
+    environment {
+        DEV_BUCKET = 'bucket-dummy-s3jenkins-kms-030225'
+        PROD_BUCKET = 's3-jenkins-with-kms-030125'
+  
+    }
+
+    stages {
+        stage('Upload to S3 - Dev') {
+            when { 
+                expression { return params.BRANCH_NAME == 'develop' } 
+            }
+            steps {
+                sh '''
+                    echo "Copying files to Development S3 bucket: $DEV_BUCKET"
+                    aws s3 cp . s3://$DEV_BUCKET/ --recursive
+                '''
+            }
+        }
+        
+        stage('Upload to S3 - Prod') {
+            when { 
+                expression { return params.BRANCH_NAME == 'main' }  // Corrected branch name
+            }
+            steps {
+                sh '''
+                    echo "Copying files to Production S3 bucket: $PROD_BUCKET"
+                    aws s3 cp . s3://$PROD_BUCKET/ --recursive
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Deployment to ${params.BRANCH_NAME} environment was successful!"
+        }
+        failure {
+            echo "Deployment failed!"
+        }
+    }
+}
