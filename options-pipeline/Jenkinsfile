@@ -18,13 +18,16 @@ pipeline {
     }
     stages {
         stage('Print Credentials') {
+            when {
+              branch 'main'
+            }
             steps {
             echo "RDS Password: ${env.jenkins_key}"
             echo "User: ${env.ABC}"
 
             //pwd1 should fail
             sh'''
-            pwd1 
+            pwd 
             '''
             }
         }
