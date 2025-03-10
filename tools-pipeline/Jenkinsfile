@@ -1,0 +1,13 @@
+pipeline {
+    agent any
+    tools {
+        maven 'Maven'  // Use 'Maven' (Default Name in Jenkins Global Tool Config)
+    }
+    stages {
+        stage('Example') {
+            steps {
+                sh 'mvn --version'
+            }
+        }
+    }
+}
