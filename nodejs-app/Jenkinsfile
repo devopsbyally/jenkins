@@ -19,17 +19,19 @@ pipeline {
                     }
                 }
 
-
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('SonarQube') {
-                    sh '''
-                    sonar-scanner \
-                    -Dsonar.projectKey=nodejs-app \
-                    -Dsonar.sources=. \
-                    -Dsonar.host.url=$SONARQUBE_URL \
-                    -Dsonar.login=$SONARQUBE_TOKEN
-                    '''
+                    script {
+                        def scannerHome = tool name: 'SonarQube', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+                        sh """
+                        ${scannerHome}/bin/sonar-scanner \
+                        -Dsonar.projectKey=nodejs-app \
+                        -Dsonar.sources=. \
+                        -Dsonar.host.url=$SONARQUBE_URL \
+                        -Dsonar.login=$SONARQUBE_TOKEN
+                        """
+                    }
                 }
             }
         }
