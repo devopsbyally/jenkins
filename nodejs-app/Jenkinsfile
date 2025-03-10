@@ -1,0 +1,31 @@
+pipeline {
+    agent any
+
+    environment {
+        SONARQUBE_URL = 'http://18.189.21.206:9000'
+        SONARQUBE_TOKEN = credentials('jenkins-sonar')
+    }
+
+    stages {
+
+        stage('Install Dependencies') {
+            steps {
+                sh 'npm install'
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('SonarQube') {
+                    sh '''
+                    sonar-scanner \
+                    -Dsonar.projectKey=nodejs-app \
+                    -Dsonar.sources=. \
+                    -Dsonar.host.url=$SONARQUBE_URL \
+                    -Dsonar.login=$SONARQUBE_TOKEN
+                    '''
+                }
+            }
+        }
+    }
+}
