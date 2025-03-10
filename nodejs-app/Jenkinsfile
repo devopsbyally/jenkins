@@ -9,11 +9,16 @@ pipeline {
     stages {
 
         stage('Install Dependencies') {
-            steps {
-                dir('nodejs-app')
-                sh 'npm install'
-            }
-        }
+                    steps {
+                        script {
+                            sh 'ls -la' // Debugging step: List files to check directory
+                            dir('nodejs-app') { // Ensure directory exists before using it
+                                sh 'npm install'
+                            }
+                        }
+                    }
+                }
+
 
         stage('SonarQube Analysis') {
             steps {
