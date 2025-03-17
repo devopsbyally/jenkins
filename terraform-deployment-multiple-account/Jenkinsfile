@@ -1,0 +1,184 @@
+
+pipeline {
+        agent {
+        label 'ecs-agent' // Use the ECS agent with the label
+    }
+
+    environment {
+        S3_STATE_FILE_BUCKET = "terraform-state-files-031325"
+        AWS_REGION = "us-east-2"
+        ASSUME_ROLE_ARN = "arn:aws:iam::010526277866:role/jenkins-assume-role"
+    }
+
+parameters {
+  activeChoice choiceType: 'PT_SINGLE_SELECT', description: 'select the branch', filterLength: 1, filterable: false, name: 'BRANCH', randomName: 'choice-parameter-29932583121861', script: groovyScript(fallbackScript: [classpath: [], oldScript: '', sandbox: true, script: 'return ["ERROR"]'], script: [classpath: [], oldScript: '', sandbox: true, script: 'return ["develop", "master"]'])
+  reactiveChoice choiceType: 'PT_SINGLE_SELECT', description: 'select the environment', filterLength: 1, filterable: false, name: 'ENVIRONMENT', randomName: 'choice-parameter-29932584539752', referencedParameters: 'BRANCH', script: groovyScript(fallbackScript: [classpath: [], oldScript: '', sandbox: true, script: 'return ["ERROR"]'], script: [classpath: [], oldScript: '', sandbox: true, script: '''if (BRANCH.equals("develop")) {
+                            return ["dev", "tst"]
+                        } else if (BRANCH.equals("master")) {
+                            return ["qa", "prod"]
+                        } else {
+                            return ["UNKNOWN"]
+                        }'''])
+    string defaultValue: 'terraform-deployment-multiple-account', description: 'Enter the repository name', name: 'REPO_NAME', trim: true
+  }
+
+
+    stages {
+        stage('Validate Parameters') {
+            steps {
+                script {
+                    if (params.BRANCH == 'develop' && !(params.ENVIRONMENT in ['dev', 'tst'])) {
+                        error("Invalid ENV selected for BRANCH 'develop'. Allowed values: dev, tst.")
+                    }
+                    if (params.BRANCH == 'master' && !(params.ENVIRONMENT in ['qa', 'prod'])) {
+                        error("Invalid ENV selected for BRANCH 'master'. Allowed values: qa, prod.")
+                    }
+                }
+            }
+        }
+
+        
+
+        stage('Checkout Code') {
+            steps {
+                script {
+                    def repoUrl = "https://github.com/devopsbyally/${params.REPO_NAME}.git"
+                    echo "Checking out repository: ${repoUrl} on branch: ${params.BRANCH}"
+                    git branch: params.BRANCH, url: repoUrl
+                }
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                script {
+                    echo "Initializing Terraform for environment: ${params.ENVIRONMENT}"
+                    sh '''
+                    terraform init -force-copy \
+                        -backend-config="bucket=${S3_STATE_FILE_BUCKET}" \
+                        -backend-config="key=${REPO_NAME}/${ENVIRONMENT}/terraform.tfstate" \
+                        -backend-config="region=${AWS_REGION}" \
+                        -no-color
+                    terraform get -update -no-color
+                    '''
+                }
+            }
+        }
+
+        stage('Terraform Validate') {
+            steps {
+                script {
+                    echo "Validating Terraform configuration for environment: ${params.ENVIRONMENT}"
+                    sh "terraform validate -no-color"
+                }
+            }
+        }
+
+        stage('Checkov Scan') {
+    steps {
+        catchError(buildResult: 'SUCCESS') {
+            script {
+                try {
+                    sh 'checkov --version'
+                    sh 'checkov -d .'
+                } catch (Exception e) {
+                    echo "Checkov scan failed: ${e.getMessage()}"
+                }
+            }
+        }
+    }
+}
+
+
+
+        stage('Terraform Plan') {
+            steps {
+                script {
+                    echo "Planning Terraform for environment: ${params.ENVIRONMENT}"
+                    sh "terraform plan -var-file=${params.ENVIRONMENT}.tfvars --out=${WORKSPACE}/latestplan.json -no-color"
+                }
+            }
+        }
+
+        stage('Backup Terraform Plan to S3') {
+            steps {
+                script {
+                    echo "Uploading Terraform plan to S3 for backup..."
+                    sh '''
+                    aws s3 cp ${WORKSPACE}/latestplan.json s3://${S3_STATE_FILE_BUCKET}/${REPO_NAME}/${ENVIRONMENT}/latestplan.json --region ${AWS_REGION}
+                    '''
+                }
+            }
+        }
+
+stage('Manual Approval') {
+            steps {
+                script {
+                    def userInput = input message: 'Do you want to proceed with Terraform Apply?',
+                        parameters: [
+                            choice(name: 'APPROVE', choices: ['yes', 'no'], description: 'Select yes to apply Terraform changes')
+                        ]
+                    if (userInput != 'yes') {
+                        error("Terraform Apply was not approved. Pipeline aborted.")
+                    }
+                }
+            }
+        }
+
+        stage('Assume AWS Role') {
+            steps {
+                script {
+                    echo "Assuming AWS IAM Role: ${ASSUME_ROLE_ARN}"
+
+                    sh '''
+                    echo "Fetching temporary AWS credentials..."
+                    
+                    # Ensure AWS credentials exist before assuming role
+                    if ! aws sts get-caller-identity > /dev/null 2>&1; then
+                        echo "Error: No valid AWS credentials found. Ensure the Jenkins agent has IAM credentials."
+                        exit 1
+                    fi
+
+                    # Assume the role
+                    CREDENTIALS=$(aws sts assume-role --role-arn "$ASSUME_ROLE_ARN" --role-session-name "JenkinsSession" --query 'Credentials' --output json)
+
+                    if [ -z "$CREDENTIALS" ]; then
+                        echo "Error: Failed to assume role"
+                        exit 1
+                    fi
+
+                    AWS_ACCESS_KEY_ID=$(echo "$CREDENTIALS" | jq -r '.AccessKeyId')
+                    AWS_SECRET_ACCESS_KEY=$(echo "$CREDENTIALS" | jq -r '.SecretAccessKey')
+                    AWS_SESSION_TOKEN=$(echo "$CREDENTIALS" | jq -r '.SessionToken')
+
+                    export AWS_ACCESS_KEY_ID
+                    export AWS_SECRET_ACCESS_KEY
+                    export AWS_SESSION_TOKEN
+
+                    echo "Successfully assumed role and set temporary AWS credentials."
+                    '''
+                }
+            }
+        }
+
+
+        stage('Terraform Apply') {
+            steps {
+                script {
+                    echo "Applying Terraform changes for environment: ${params.ENVIRONMENT}"
+                     sh '''
+                CREDENTIALS=$(aws sts assume-role --role-arn arn:aws:iam::010526277866:role/jenkins-assume-role --role-session-name JenkinsSession --query "Credentials | {AWS_ACCESS_KEY_ID: AccessKeyId, AWS_SECRET_ACCESS_KEY: SecretAccessKey, AWS_SESSION_TOKEN: SessionToken}" --output text)
+                export AWS_ACCESS_KEY_ID=$(echo $CREDENTIALS | awk '{print $1}')
+                export AWS_SECRET_ACCESS_KEY=$(echo $CREDENTIALS | awk '{print $2}')
+                export AWS_SESSION_TOKEN=$(echo $CREDENTIALS | awk '{print $3}')
+                
+                aws sts get-caller-identity
+                aws s3 ls
+                
+                terraform apply -auto-approve ${WORKSPACE}/latestplan.json -no-color
+            '''
+                }
+            }
+        }
+    }
+}
