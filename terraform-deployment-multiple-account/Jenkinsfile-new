@@ -1,0 +1,204 @@
+
+pipeline {
+        agent {
+        label 'ecs-agent' // Use the ECS agent with the label
+    }
+
+    environment {
+        S3_STATE_FILE_BUCKET = "terraform-state-files-031325"
+        AWS_REGION = "us-east-2"
+        ACCOUNT_A_ASSUME_ROLE = "arn:aws:iam::010526277866:role/jenkins-assume-role"
+        ACCOUNT_B_ASSUME_ROLE = "arn:aws:iam::273354670397:role/jenkins-assume-role"
+    }
+
+parameters {
+  activeChoice choiceType: 'PT_SINGLE_SELECT', description: 'select the branch', filterLength: 1, filterable: false, name: 'BRANCH', randomName: 'choice-parameter-29932583121861', script: groovyScript(fallbackScript: [classpath: [], oldScript: '', sandbox: true, script: 'return ["ERROR"]'], script: [classpath: [], oldScript: '', sandbox: true, script: 'return ["develop", "master"]'])
+  reactiveChoice choiceType: 'PT_SINGLE_SELECT', description: 'select the environment', filterLength: 1, filterable: false, name: 'ENVIRONMENT', randomName: 'choice-parameter-29932584539752', referencedParameters: 'BRANCH', script: groovyScript(fallbackScript: [classpath: [], oldScript: '', sandbox: true, script: 'return ["ERROR"]'], script: [classpath: [], oldScript: '', sandbox: true, script: '''if (BRANCH.equals("develop")) {
+                            return ["dev", "tst"]
+                        } else if (BRANCH.equals("master")) {
+                            return ["qa", "prod"]
+                        } else {
+                            return ["UNKNOWN"]
+                        }'''])
+    string defaultValue: 'terraform-deployment-multiple-account', description: 'Enter the repository name', name: 'REPO_NAME', trim: true
+  }
+
+
+    stages {
+        stage('Validate Parameters') {
+            steps {
+                script {
+                    if (params.BRANCH == 'develop' && !(params.ENVIRONMENT in ['dev', 'tst'])) {
+                        error("Invalid ENV selected for BRANCH 'develop'. Allowed values: dev, tst.")
+                    }
+                    if (params.BRANCH == 'master' && !(params.ENVIRONMENT in ['qa', 'prod'])) {
+                        error("Invalid ENV selected for BRANCH 'master'. Allowed values: qa, prod.")
+                    }
+                }
+            }
+        }
+        stage('Select AWS Role') {
+            steps {
+                script {
+                    echo "Selected Branch: ${params.BRANCH}"
+                    echo "Selected Environment: ${params.ENVIRONMENT}"
+
+                    if (params.BRANCH == "develop" && params.ENVIRONMENT in ["dev", "tst"]) {
+                        env.AWS_ASSUME_ROLE = env.ACCOUNT_A_ASSUME_ROLE
+                    } else if (params.BRANCH == "master" && params.ENVIRONMENT in ["qa", "prod"]) {
+                        env.AWS_ASSUME_ROLE = env.ACCOUNT_B_ASSUME_ROLE
+                    } else {
+                        error("Invalid environment selection for the branch!")
+                    }
+
+                    // Debugging
+                    echo "AWS_ASSUME_ROLE after assignment: ${env.AWS_ASSUME_ROLE}"
+                }
+            }
+        }
+
+stage('Assume AWS Role') {
+    steps {
+        script {
+            echo "Assuming AWS IAM Role: ${env.AWS_ASSUME_ROLE}"
+
+            def credsJson = sh(
+                script: '''
+                aws sts assume-role --role-arn "${AWS_ASSUME_ROLE}" --role-session-name "JenkinsSession" --query 'Credentials' --output json
+                ''',
+                returnStdout: true
+            ).trim()
+
+            def creds = readJSON text: credsJson
+
+            // Injecting into environment for next stages
+            env.AWS_ACCESS_KEY_ID = creds.AccessKeyId
+            env.AWS_SECRET_ACCESS_KEY = creds.SecretAccessKey
+            env.AWS_SESSION_TOKEN = creds.SessionToken
+
+            echo "Successfully assumed role and exported AWS temporary credentials."
+        }
+    }
+}
+
+
+
+
+
+        stage('Checkout Code') {
+            steps {
+                script {
+                    def repoUrl = "https://github.com/devopsbyally/${params.REPO_NAME}.git"
+                    echo "Checking out repository: ${repoUrl} on branch: ${params.BRANCH}"
+                    git branch: params.BRANCH, url: repoUrl
+                }
+            }
+        }
+
+stage('Terraform Init') {
+    steps {
+        withEnv([
+            "AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID}",
+            "AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY}",
+            "AWS_SESSION_TOKEN=${env.AWS_SESSION_TOKEN}"
+        ]) {
+            script {
+                echo "Initializing Terraform for environment: ${params.ENVIRONMENT}"
+                sh '''
+                terraform init -force-copy \
+                    -backend-config="bucket=${S3_STATE_FILE_BUCKET}" \
+                    -backend-config="key=${REPO_NAME}/${ENVIRONMENT}/terraform.tfstate" \
+                    -backend-config="region=${AWS_REGION}" \
+                    -no-color
+                terraform get -update -no-color
+                '''
+            }
+        }
+    }
+}
+
+
+
+   stage('Terraform Validate') {
+            steps {
+                withEnv([
+                    "AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID}",
+                    "AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY}",
+                    "AWS_SESSION_TOKEN=${env.AWS_SESSION_TOKEN}"
+                ]) {
+                    echo "Validating Terraform configuration for environment: ${params.ENVIRONMENT}"
+                    sh "terraform validate -no-color"
+                }
+            }
+        }
+stage('Checkov Scan') {
+    steps {
+        catchError(buildResult: 'SUCCESS') {
+            script {
+                sh 'checkov --version'
+                sh 'checkov -d . --download-external-modules true'
+            }
+        }
+    }
+}
+
+
+
+
+        stage('Terraform Plan') {
+            steps {
+                withEnv([
+                    "AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID}",
+                    "AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY}",
+                    "AWS_SESSION_TOKEN=${env.AWS_SESSION_TOKEN}"
+                ]) {
+                    echo "Planning Terraform for environment: ${params.ENVIRONMENT}"
+                    sh "terraform plan -var-file=${params.ENVIRONMENT}.tfvars --out=${WORKSPACE}/latestplan.json -no-color"
+                }
+            }
+        }
+
+        stage('Backup Terraform Plan to S3') {
+            steps {
+                withEnv([
+                    "AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID}",
+                    "AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY}",
+                    "AWS_SESSION_TOKEN=${env.AWS_SESSION_TOKEN}"
+                ]) {
+                    echo "Uploading Terraform plan to S3 for backup..."
+                    sh '''
+                    aws s3 cp ${WORKSPACE}/latestplan.json s3://${S3_STATE_FILE_BUCKET}/${REPO_NAME}/${ENVIRONMENT}/latestplan.json --region ${AWS_REGION}
+                    '''
+                }
+            }
+        }
+
+stage('Manual Approval') {
+            steps {
+                script {
+                    def userInput = input message: 'Do you want to proceed with Terraform Apply?',
+                        parameters: [
+                            choice(name: 'APPROVE', choices: ['yes', 'no'], description: 'Select yes to apply Terraform changes')
+                        ]
+                    if (userInput != 'yes') {
+                        error("Terraform Apply was not approved. Pipeline aborted.")
+                    }
+                }
+            }
+        }
+
+
+        stage('Terraform Apply') {
+            steps {
+                withEnv([
+                    "AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID}",
+                    "AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY}",
+                    "AWS_SESSION_TOKEN=${env.AWS_SESSION_TOKEN}"
+                ]) {
+                    echo "Applying Terraform changes for environment: ${params.ENVIRONMENT}"
+                    sh "terraform apply -auto-approve ${WORKSPACE}/latestplan.json -no-color"
+                }
+            }
+        }
+    }
+}
